@@ -63,12 +63,14 @@ App runs at: **http://localhost:5173**
 ### 📊 Dashboard (Overview)
 - **Driver Status panel** — lists all drivers with availability badge + visual progress bar
 - **Live Grid Map** — canvas-based coordinate map showing all driver positions (green = available, red = busy)
-- **Recent Activity Timeline** — last 10 ride events with colored timeline dots, assignment info, and distance
-- **Ride summary stats** — Total, Completed, Active, No Driver, and Average Distance
+- **Recent Activity Timeline** — last 10 ride events with colored timeline dots, assignment info, relative timestamps (`timeAgo`), and distance
+- **Ride summary stats** — Total, Completed, Active, Cancelled, No Driver, and Average Distance
+- **No-Driver Warning** — prominently alerts when all drivers are busy and no assignment can be made
 
 ### 👨‍✈️ Drivers Tab
 - Add a new driver with name and (x, y) coordinates
 - View all drivers — availability status, location
+- **Inline Edit** — easily update a driver's X and Y coordinates inline
 - Toggle driver between **Available** / **Busy**
 - Delete a driver
 - Full driver location map
@@ -78,7 +80,9 @@ App runs at: **http://localhost:5173**
 - System finds and assigns the **nearest available driver** instantly
 - Shows full **distance breakdown** — ranked list of all drivers and their distances
 - **Live map** updates with your position as you type coordinates
+- **Search & Filter** — quickly find rides by user name, driver name, or status
 - Complete active rides (returns driver to available pool)
+- **Cancel rides** (stops ride and returns driver to available pool)
 - Full ride history with status badges
 
 ---
@@ -90,10 +94,12 @@ App runs at: **http://localhost:5173**
 | `GET` | `/api/drivers` | List all drivers |
 | `POST` | `/api/drivers` | Add a new driver `{ name, x, y }` |
 | `DELETE` | `/api/drivers/:id` | Remove a driver |
+| `PATCH` | `/api/drivers/:id` | Update driver coordinates `{ x, y }` |
 | `PATCH` | `/api/drivers/:id/toggle` | Toggle driver availability |
 | `GET` | `/api/rides` | List all ride requests |
 | `POST` | `/api/rides` | Request a ride — auto-assigns nearest driver `{ user_name, user_x, user_y }` |
 | `POST` | `/api/rides/:id/complete` | Mark ride as completed (frees up driver) |
+| `POST` | `/api/rides/:id/cancel` | Cancel an assigned ride (frees up driver) |
 | `GET` | `/api/stats` | Dashboard statistics |
 
 ---
