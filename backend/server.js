@@ -217,6 +217,24 @@ app.post('/api/rides', async (req, res) => {
   }
 });
 
+// PATCH edit driver coordinates
+app.patch('/api/drivers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { x, y } = req.body;
+    if (x === undefined || y === undefined) {
+      return res.status(400).json({ success: false, message: 'x and y are required.' });
+    }
+    const driver = await get('SELECT * FROM drivers WHERE id = ?', [id]);
+    if (!driver) return res.status(404).json({ success: false, message: 'Driver not found.' });
+    await run('UPDATE drivers SET x = ?, y = ? WHERE id = ?', [parseFloat(x), parseFloat(y), id]);
+    const updated = await get('SELECT * FROM drivers WHERE id = ?', [id]);
+    res.json({ success: true, data: updated, message: `Driver "${driver.name}" location updated to (${x}, ${y}).` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // POST complete a ride
 app.post('/api/rides/:id/complete', async (req, res) => {
   try {
@@ -234,15 +252,33 @@ app.post('/api/rides/:id/complete', async (req, res) => {
   }
 });
 
+// POST cancel a ride
+app.post('/api/rides/:id/cancel', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ride = await get('SELECT * FROM rides WHERE id = ?', [id]);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride not found.' });
+    if (ride.status !== 'assigned') return res.status(400).json({ success: false, message: 'Only assigned rides can be cancelled.' });
+
+    await run('UPDATE rides SET status = ? WHERE id = ?', ['cancelled', id]);
+    if (ride.driver_id) await run('UPDATE drivers SET available = 1 WHERE id = ?', [ride.driver_id]);
+
+    res.json({ success: true, message: `Ride #${id} cancelled. Driver "${ride.driver_name}" is now available.` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET stats
 app.get('/api/stats', async (req, res) => {
   try {
-    const [totalDrivers, availableDrivers, totalRides, completedRides, assignedRides] = await Promise.all([
+    const [totalDrivers, availableDrivers, totalRides, completedRides, assignedRides, cancelledRides] = await Promise.all([
       get('SELECT COUNT(*) as count FROM drivers'),
       get('SELECT COUNT(*) as count FROM drivers WHERE available = 1'),
       get('SELECT COUNT(*) as count FROM rides'),
       get("SELECT COUNT(*) as count FROM rides WHERE status = 'completed'"),
       get("SELECT COUNT(*) as count FROM rides WHERE status = 'assigned'"),
+      get("SELECT COUNT(*) as count FROM rides WHERE status = 'cancelled'"),
     ]);
     res.json({
       success: true,
@@ -252,6 +288,7 @@ app.get('/api/stats', async (req, res) => {
         totalRides: totalRides.count,
         completedRides: completedRides.count,
         assignedRides: assignedRides.count,
+        cancelledRides: cancelledRides.count,
       },
     });
   } catch (err) {

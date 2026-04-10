@@ -2,7 +2,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-// ─── TOAST HOOK ──────────────────────────────────────────────────────────────
+// ─── TIME AGO HELPER ────────────────────────────────────────────────────
+function timeAgo(dateStr) {
+  const now = new Date();
+  const past = new Date(dateStr);
+  const diffMs = now - past;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHrs = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffSec < 30) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return past.toLocaleDateString();
+}
+
+// ─── TOAST HOOK ───────────────────────────────────────────────────────
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const addToast = useCallback((message, type = 'info') => {
@@ -16,21 +34,20 @@ function useToast() {
 // ─── MINI MAP COMPONENT ───────────────────────────────────────────────────────
 function MiniMap({ drivers, currentUser }) {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const GRID_SIZE = 12;
   const PADDING = 30;
 
-  useEffect(() => {
+  const draw = useCallback((W, H) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    canvas.width = W;
+    canvas.height = H;
     const ctx = canvas.getContext('2d');
-    const W = canvas.width;
-    const H = canvas.height;
     const cellW = (W - PADDING * 2) / GRID_SIZE;
     const cellH = (H - PADDING * 2) / GRID_SIZE;
 
     ctx.clearRect(0, 0, W, H);
-
-    // Background
     ctx.fillStyle = '#111827';
     ctx.fillRect(0, 0, W, H);
 
@@ -62,21 +79,17 @@ function MiniMap({ drivers, currentUser }) {
     drivers.forEach(d => {
       const { cx, cy } = toCanvas(d.x, d.y);
       const isAvailable = d.available === 1;
-
-      // Connection line to user
       if (currentUser && isAvailable) {
         const uc = toCanvas(currentUser.x, currentUser.y);
         ctx.beginPath();
         ctx.setLineDash([3, 5]);
-        ctx.strokeStyle = 'rgba(108,99,255,0.2)';
+        ctx.strokeStyle = 'rgba(108,99,255,0.25)';
         ctx.lineWidth = 1;
         ctx.moveTo(cx, cy);
         ctx.lineTo(uc.cx, uc.cy);
         ctx.stroke();
         ctx.setLineDash([]);
       }
-
-      // Driver circle
       const color = isAvailable ? '#10b981' : '#ef4444';
       ctx.beginPath();
       ctx.arc(cx, cy, 8, 0, Math.PI * 2);
@@ -86,8 +99,6 @@ function MiniMap({ drivers, currentUser }) {
       ctx.arc(cx, cy, 5, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-
-      // Name label
       ctx.fillStyle = '#f1f5f9';
       ctx.font = 'bold 9px Inter, sans-serif';
       ctx.textAlign = 'center';
@@ -112,14 +123,28 @@ function MiniMap({ drivers, currentUser }) {
     }
   }, [drivers, currentUser]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = entry.contentRect.width;
+        draw(w, Math.round(w * 0.75));
+      }
+    });
+    observer.observe(container);
+    draw(container.offsetWidth, Math.round(container.offsetWidth * 0.75));
+    return () => observer.disconnect();
+  }, [draw]);
+
   return (
-    <canvas
-      ref={canvasRef}
-      width={400}
-      height={320}
-      className="map-canvas"
-      style={{ borderRadius: '8px' }}
-    />
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <canvas
+        ref={canvasRef}
+        className="map-canvas"
+        style={{ borderRadius: '8px', display: 'block', width: '100%' }}
+      />
+    </div>
   );
 }
 
@@ -132,6 +157,8 @@ export default function App() {
   const [loading, setLoading] = useState({ drivers: false, rides: false, addDriver: false, requestRide: false });
   const [lastRideResult, setLastRideResult] = useState(null);
   const [userPreview, setUserPreview] = useState(null);
+  const [rideSearch, setRideSearch] = useState('');          // suggestion 2: search
+  const [editingDriver, setEditingDriver] = useState(null);  // suggestion 3: edit driver { id, x, y }
 
   // Forms
   const [driverForm, setDriverForm] = useState({ name: '', x: '', y: '' });
@@ -262,11 +289,40 @@ export default function App() {
     } catch { addToast('Network error', 'error'); }
   };
 
+  // Cancel Ride
+  const handleCancelRide = async (id) => {
+    if (!window.confirm('Cancel this ride? The driver will be freed.')) return;
+    try {
+      const r = await fetch(`${API}/rides/${id}/cancel`, { method: 'POST' });
+      const d = await r.json();
+      if (d.success) { addToast(d.message, 'success'); refreshAll(); }
+      else addToast(d.message, 'error');
+    } catch { addToast('Network error', 'error'); }
+  };
+
+  // Edit Driver location
+  const handleEditDriver = async (id) => {
+    if (!editingDriver || editingDriver.id !== id) return;
+    const { x, y } = editingDriver;
+    if (x === '' || y === '') return addToast('Enter both x and y.', 'error');
+    try {
+      const r = await fetch(`${API}/drivers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x, y }),
+      });
+      const d = await r.json();
+      if (d.success) { addToast(d.message, 'success'); setEditingDriver(null); refreshAll(); }
+      else addToast(d.message, 'error');
+    } catch { addToast('Network error', 'error'); }
+  };
+
   const statusBadge = (status) => {
     const map = {
       assigned: { cls: 'badge-assigned', label: '🔷 Assigned' },
       completed: { cls: 'badge-completed', label: '✅ Completed' },
       no_driver_available: { cls: 'badge-no-driver', label: '❌ No Driver' },
+      cancelled: { cls: 'badge-danger', label: '🚫 Cancelled' },
       pending: { cls: 'badge-no-driver', label: '⏳ Pending' },
     };
     const m = map[status] || { cls: 'badge-no-driver', label: status };
@@ -324,6 +380,7 @@ export default function App() {
             { icon: '🚗', value: stats?.totalRides ?? '—', label: 'Total Rides' },
             { icon: '✅', value: stats?.completedRides ?? '—', label: 'Completed' },
             { icon: '🔷', value: stats?.assignedRides ?? '—', label: 'Active Rides' },
+            { icon: '🚫', value: stats?.cancelledRides ?? '—', label: 'Cancelled' },
           ].map((s, i) => (
             <div className="stat-card" key={i}>
               <div className="stat-icon">{s.icon}</div>
@@ -336,6 +393,31 @@ export default function App() {
         {/* ═══════════════ DASHBOARD TAB — Overview ═══════════════ */}
         {activeTab === 'dashboard' && (
           <div className="main-grid">
+
+            {/* ── No-driver warning banner ── */}
+            {drivers.length > 0 && drivers.every(d => !d.available) && (
+              <div style={{
+                gridColumn: '1 / -1',
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))',
+                border: '1px solid rgba(239,68,68,0.4)',
+                borderRadius: '12px',
+                padding: '1rem 1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}>
+                <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#ef4444', fontSize: '0.95rem' }}>All Drivers are Busy</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Ride requests will be logged but no assignment can be made until a driver completes their current trip.
+                  </div>
+                </div>
+                <button className="btn btn-sm btn-toggle-sm" style={{ marginLeft: 'auto', flexShrink: 0 }} onClick={() => setActiveTab('rides')} id="btn-warn-request">
+                  View Rides →
+                </button>
+              </div>
+            )}
 
             {/* ── Driver Availability Breakdown ── */}
             <div className="card">
@@ -419,9 +501,29 @@ export default function App() {
               </div>
 
               {rides.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">🚗</div>
-                  <div className="empty-text">No rides yet. Go to the <strong>Rides</strong> tab to request one.</div>
+                <div style={{ padding: '1.5rem 0' }}>
+                  <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🚀</div>
+                    <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.3rem' }}>No rides yet — here's how to get started</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Follow these 3 steps to make your first assignment</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    {[
+                      { step: '1', icon: '👨‍✈️', title: 'Add a Driver', desc: 'Go to the Drivers tab → enter name and (x, y) location', tab: 'drivers', btnLabel: 'Go to Drivers' },
+                      { step: '2', icon: '🚗', title: 'Request a Ride', desc: 'Go to the Rides tab → enter your name and location', tab: 'rides', btnLabel: 'Go to Rides' },
+                      { step: '3', icon: '📊', title: 'View Results', desc: 'Come back here to see the activity timeline and stats', tab: null, btnLabel: null },
+                    ].map(({ step, icon, title, desc, tab, btnLabel }) => (
+                      <div key={step} style={{ flex: '1', minWidth: '160px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem', textAlign: 'center' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--accent-glow)', border: '1px solid var(--border-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-light)' }}>Step {step}</div>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>{icon}</div>
+                        <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: '0.3rem' }}>{title}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>{desc}</div>
+                        {btnLabel && (
+                          <button className="btn btn-primary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.75rem' }} onClick={() => setActiveTab(tab)} id={`btn-step-${step}`}>{btnLabel}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="scrollable" style={{ maxHeight: '420px' }}>
@@ -484,7 +586,7 @@ export default function App() {
                                 </div>
                               )}
                               <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                🕐 {new Date(ride.created_at).toLocaleString()}
+                                🕐 {timeAgo(ride.created_at)}
                               </div>
                             </div>
                           </li>
@@ -564,24 +666,42 @@ export default function App() {
                   <ul className="data-list">
                     {drivers.map(d => (
                       <li key={d.id} className="driver-item">
-                        <div className="driver-info">
-                          <div className="driver-avatar">{d.name[0].toUpperCase()}</div>
-                          <div>
-                            <div className="driver-name">{d.name}</div>
-                            <div className="driver-coords">📍 ({d.x}, {d.y})</div>
+                        {editingDriver && editingDriver.id === d.id ? (
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', width: '100%' }}>
+                            <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                              <input className="form-input" type="number" placeholder="X" value={editingDriver.x} onChange={e => setEditingDriver(prev => ({ ...prev, x: e.target.value }))} />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                              <input className="form-input" type="number" placeholder="Y" value={editingDriver.y} onChange={e => setEditingDriver(prev => ({ ...prev, y: e.target.value }))} />
+                            </div>
+                            <button className="btn btn-sm btn-success" onClick={() => handleEditDriver(d.id)}>Save</button>
+                            <button className="btn btn-sm" onClick={() => setEditingDriver(null)}>Cancel</button>
                           </div>
-                          <span className={`badge ${d.available ? 'badge-available' : 'badge-busy'}`}>
-                            {d.available ? '● Available' : '● Busy'}
-                          </span>
-                        </div>
-                        <div className="driver-actions">
-                          <button className="btn btn-sm btn-toggle-sm" onClick={() => handleToggleDriver(d.id)} id={`btn-toggle-tab-${d.id}`}>
-                            {d.available ? 'Set Busy' : 'Set Free'}
-                          </button>
-                          <button className="btn btn-sm btn-danger-sm" onClick={() => handleDeleteDriver(d.id, d.name)} id={`btn-delete-tab-${d.id}`}>
-                            🗑
-                          </button>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="driver-info">
+                              <div className="driver-avatar">{d.name[0].toUpperCase()}</div>
+                              <div>
+                                <div className="driver-name">{d.name}</div>
+                                <div className="driver-coords">📍 ({d.x}, {d.y})</div>
+                              </div>
+                              <span className={`badge ${d.available ? 'badge-available' : 'badge-busy'}`}>
+                                {d.available ? '● Available' : '● Busy'}
+                              </span>
+                            </div>
+                            <div className="driver-actions">
+                              <button className="btn btn-sm" onClick={() => setEditingDriver({ id: d.id, x: d.x, y: d.y })} title="Edit location">
+                                ✏️
+                              </button>
+                              <button className="btn btn-sm btn-toggle-sm" onClick={() => handleToggleDriver(d.id)} id={`btn-toggle-tab-${d.id}`}>
+                                {d.available ? 'Set Busy' : 'Set Free'}
+                              </button>
+                              <button className="btn btn-sm btn-danger-sm" onClick={() => handleDeleteDriver(d.id, d.name)} id={`btn-delete-tab-${d.id}`}>
+                                🗑
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -699,19 +819,31 @@ export default function App() {
 
             {/* Rides History full width */}
             <div className="card full-width">
-              <div className="card-header">
+              <div className="card-header" style={{ flexWrap: 'wrap', gap: '1rem' }}>
                 <div className="card-title">
                   <div className="card-title-icon icon-amber">📋</div>
                   Rides History
                   <span className="count-badge">{rides.length}</span>
                 </div>
+                <input 
+                  type="text" 
+                  className="form-input form-input-sm" 
+                  placeholder="Search user or driver..." 
+                  value={rideSearch} 
+                  onChange={e => setRideSearch(e.target.value)} 
+                  style={{ width: '200px' }}
+                />
               </div>
               <div className="scrollable" style={{ maxHeight: '500px' }}>
                 {rides.length === 0 ? (
                   <div className="empty-state"><div className="empty-icon">🚗</div><div className="empty-text">No rides requested yet</div></div>
                 ) : (
                   <ul className="data-list">
-                    {rides.map(ride => (
+                    {rides.filter(r => 
+                      r.user_name.toLowerCase().includes(rideSearch.toLowerCase()) || 
+                      (r.driver_name && r.driver_name.toLowerCase().includes(rideSearch.toLowerCase())) ||
+                      r.status.toLowerCase().includes(rideSearch.toLowerCase())
+                    ).map(ride => (
                       <li key={ride.id} className="ride-item">
                         <div className="ride-info">
                           <div className="ride-avatar">👤</div>
@@ -721,20 +853,28 @@ export default function App() {
                               📍 ({ride.user_x}, {ride.user_y})
                               {ride.driver_name && <> &nbsp;→&nbsp; 👨‍✈️ <strong>{ride.driver_name}</strong></>}
                               {ride.distance && <> &nbsp;·&nbsp; {ride.distance} units</>}
-                              &nbsp;·&nbsp; {new Date(ride.created_at).toLocaleString()}
+                              &nbsp;·&nbsp; {timeAgo(ride.created_at)}
                             </div>
                           </div>
                           {statusBadge(ride.status)}
                         </div>
                         <div className="ride-actions">
                           {ride.status === 'assigned' && (
-                            <button className="btn btn-sm btn-complete-sm" onClick={() => handleCompleteRide(ride.id)} id={`btn-complete-tab-${ride.id}`}>
-                              ✓ Done
-                            </button>
+                            <>
+                              <button className="btn btn-sm btn-complete-sm" onClick={() => handleCompleteRide(ride.id)} id={`btn-complete-tab-${ride.id}`}>
+                                ✓ Done
+                              </button>
+                              <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }} onClick={() => handleCancelRide(ride.id)}>
+                                Cancel
+                              </button>
+                            </>
                           )}
                         </div>
                       </li>
                     ))}
+                    {rides.filter(r => r.user_name.toLowerCase().includes(rideSearch.toLowerCase()) || (r.driver_name && r.driver_name.toLowerCase().includes(rideSearch.toLowerCase())) || r.status.toLowerCase().includes(rideSearch.toLowerCase())).length === 0 && (
+                      <div className="empty-state"><div className="empty-text">No matching rides found</div></div>
+                    )}
                   </ul>
                 )}
               </div>
