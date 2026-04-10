@@ -316,7 +316,7 @@ export default function App() {
           <p>Automatically assigns the nearest available driver using Euclidean distance calculation</p>
         </div>
 
-        {/* Stats Bar */}
+        {/* Stats Bar — always visible */}
         <div className="stats-bar">
           {[
             { icon: '👨‍✈️', value: stats?.totalDrivers ?? '—', label: 'Total Drivers' },
@@ -333,274 +333,417 @@ export default function App() {
           ))}
         </div>
 
-        {/* Main Grid */}
-        <div className="main-grid">
+        {/* ═══════════════ DASHBOARD TAB — Overview ═══════════════ */}
+        {activeTab === 'dashboard' && (
+          <div className="main-grid">
 
-          {/* ── Add Driver ── */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <div className="card-title-icon icon-purple">👨‍✈️</div>
-                Add Driver
-              </div>
-            </div>
-            <form onSubmit={handleAddDriver} id="form-add-driver">
-              <div className="form-group">
-                <label className="form-label">Driver Name</label>
-                <input
-                  className="form-input"
-                  type="text"
-                  placeholder="e.g. John Smith"
-                  value={driverForm.name}
-                  onChange={e => setDriverForm(f => ({ ...f, name: e.target.value }))}
-                  id="input-driver-name"
-                />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">X Coordinate</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    placeholder="0–11"
-                    min="0" max="11"
-                    value={driverForm.x}
-                    onChange={e => setDriverForm(f => ({ ...f, x: e.target.value }))}
-                    id="input-driver-x"
-                  />
+            {/* ── Driver Availability Breakdown ── */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-purple">👥</div>
+                  Driver Status
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Y Coordinate</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    placeholder="0–11"
-                    min="0" max="11"
-                    value={driverForm.y}
-                    onChange={e => setDriverForm(f => ({ ...f, y: e.target.value }))}
-                    id="input-driver-y"
-                  />
-                </div>
+                <button className="btn btn-sm btn-toggle-sm" onClick={() => setActiveTab('drivers')} id="btn-goto-drivers">
+                  Manage →
+                </button>
               </div>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={loading.addDriver}
-                id="btn-add-driver"
-              >
-                {loading.addDriver ? (
-                  <span className="loading-dots">
-                    <span className="loading-dot" /><span className="loading-dot" /><span className="loading-dot" />
-                  </span>
-                ) : '+ Add Driver'}
-              </button>
-            </form>
-          </div>
-
-          {/* ── Request Ride ── */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <div className="card-title-icon icon-green">🚗</div>
-                Request a Ride
-              </div>
-            </div>
-            <form onSubmit={handleRequestRide} id="form-request-ride">
-              <div className="form-group">
-                <label className="form-label">Your Name</label>
-                <input
-                  className="form-input"
-                  type="text"
-                  placeholder="e.g. Sarah"
-                  value={rideForm.user_name}
-                  onChange={e => setRideForm(f => ({ ...f, user_name: e.target.value }))}
-                  id="input-user-name"
-                />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Your X</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    placeholder="0–11"
-                    min="0" max="11"
-                    value={rideForm.user_x}
-                    onChange={e => {
-                      setRideForm(f => ({ ...f, user_x: e.target.value }));
-                      if (e.target.value !== '' && rideForm.user_y !== '') {
-                        setUserPreview({ x: parseFloat(e.target.value), y: parseFloat(rideForm.user_y) });
-                      }
-                    }}
-                    id="input-user-x"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Your Y</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    placeholder="0–11"
-                    min="0" max="11"
-                    value={rideForm.user_y}
-                    onChange={e => {
-                      setRideForm(f => ({ ...f, user_y: e.target.value }));
-                      if (rideForm.user_x !== '' && e.target.value !== '') {
-                        setUserPreview({ x: parseFloat(rideForm.user_x), y: parseFloat(e.target.value) });
-                      }
-                    }}
-                    id="input-user-y"
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                className="btn btn-success"
-                disabled={loading.requestRide}
-                id="btn-request-ride"
-              >
-                {loading.requestRide ? (
-                  <span className="loading-dots">
-                    <span className="loading-dot" /><span className="loading-dot" /><span className="loading-dot" />
-                  </span>
-                ) : '🚕 Find Nearest Driver'}
-              </button>
-            </form>
-
-            {/* Ride Result */}
-            {lastRideResult && (
-              <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: `1px solid ${lastRideResult.success ? 'var(--success)' : 'var(--danger)'}` }}>
-                <div style={{ fontWeight: 700, color: lastRideResult.success ? 'var(--success)' : 'var(--danger)', marginBottom: '0.5rem' }}>
-                  {lastRideResult.success ? '✅ Driver Assigned!' : '❌ ' + lastRideResult.message}
-                </div>
-                {lastRideResult.success && lastRideResult.allDistances && (
-                  <>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Distance to all available drivers:</div>
-                    <ul className="distance-list">
-                      {lastRideResult.allDistances.map((d, i) => (
-                        <li key={d.id} className={`distance-item ${i === 0 ? 'nearest' : ''}`}>
-                          <span style={{ fontWeight: i === 0 ? 700 : 400 }}>
-                            {i === 0 ? '🏆 ' : ''}{d.name}
-                          </span>
-                          <span style={{ color: i === 0 ? 'var(--success)' : 'var(--text-secondary)' }}>
-                            {d.distance} units
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── Live Map ── */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <div className="card-title-icon icon-blue">🗺️</div>
-                Live Grid Map
-              </div>
-              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                <span>🟢 Available</span>
-                <span>🔴 Busy</span>
-                <span>🟡 You</span>
-              </div>
-            </div>
-            <div className="map-container">
-              <MiniMap drivers={drivers} currentUser={userPreview} />
-            </div>
-          </div>
-
-          {/* ── Drivers List ── */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <div className="card-title-icon icon-purple">👥</div>
-                Drivers
-                <span className="count-badge">{drivers.length}</span>
-              </div>
-            </div>
-            <div className="scrollable">
-              {loading.drivers && drivers.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2rem' }}>
-                  <span className="loading-dots"><span className="loading-dot" /><span className="loading-dot" /><span className="loading-dot" /></span>
-                </div>
-              ) : drivers.length === 0 ? (
-                <div className="empty-state"><div className="empty-icon">👨‍✈️</div><div className="empty-text">No drivers added yet</div></div>
+              {drivers.length === 0 ? (
+                <div className="empty-state"><div className="empty-icon">👨‍✈️</div><div className="empty-text">No drivers registered yet</div></div>
               ) : (
-                <ul className="data-list">
-                  {drivers.map(d => (
-                    <li key={d.id} className="driver-item">
-                      <div className="driver-info">
-                        <div className="driver-avatar">{d.name[0].toUpperCase()}</div>
-                        <div>
-                          <div className="driver-name">{d.name}</div>
-                          <div className="driver-coords">📍 ({d.x}, {d.y})</div>
+                <>
+                  {/* Availability bar */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                      <span>🟢 Available: <strong style={{ color: 'var(--success)' }}>{drivers.filter(d => d.available).length}</strong></span>
+                      <span>🔴 Busy: <strong style={{ color: 'var(--danger)' }}>{drivers.filter(d => !d.available).length}</strong></span>
+                    </div>
+                    <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${(drivers.filter(d => d.available).length / drivers.length) * 100}%`,
+                        background: 'linear-gradient(90deg, var(--success), #059669)',
+                        borderRadius: '4px',
+                        transition: 'width 0.5s ease'
+                      }} />
+                    </div>
+                  </div>
+                  <ul className="data-list">
+                    {drivers.map(d => (
+                      <li key={d.id} className="driver-item" style={{ padding: '0.6rem 0.75rem' }}>
+                        <div className="driver-info">
+                          <div className="driver-avatar" style={{ width: 30, height: 30, fontSize: '0.8rem' }}>{d.name[0].toUpperCase()}</div>
+                          <div>
+                            <div className="driver-name" style={{ fontSize: '0.85rem' }}>{d.name}</div>
+                            <div className="driver-coords">📍 ({d.x}, {d.y})</div>
+                          </div>
                         </div>
                         <span className={`badge ${d.available ? 'badge-available' : 'badge-busy'}`}>
                           {d.available ? '● Available' : '● Busy'}
                         </span>
-                      </div>
-                      <div className="driver-actions">
-                        <button className="btn btn-sm btn-toggle-sm" onClick={() => handleToggleDriver(d.id)} title="Toggle availability" id={`btn-toggle-${d.id}`}>
-                          {d.available ? 'Set Busy' : 'Set Free'}
-                        </button>
-                        <button className="btn btn-sm btn-danger-sm" onClick={() => handleDeleteDriver(d.id, d.name)} id={`btn-delete-driver-${d.id}`}>
-                          🗑
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
-          </div>
 
-          {/* ── Rides History ── */}
-          <div className="card full-width">
-            <div className="card-header">
-              <div className="card-title">
-                <div className="card-title-icon icon-amber">🚗</div>
-                Rides History
-                <span className="count-badge">{rides.length}</span>
+            {/* ── Live Map Overview ── */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-blue">🗺️</div>
+                  Live Grid Map
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  <span>🟢 Available</span>
+                  <span>🔴 Busy</span>
+                </div>
+              </div>
+              <div className="map-container">
+                <MiniMap drivers={drivers} currentUser={null} />
               </div>
             </div>
-            <div className="scrollable">
+
+            {/* ── Recent Activity Feed ── */}
+            <div className="card full-width">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-amber">🕐</div>
+                  Recent Activity
+                  <span className="count-badge">{rides.length}</span>
+                </div>
+                <button className="btn btn-sm btn-complete-sm" onClick={() => setActiveTab('rides')} id="btn-goto-rides">
+                  Request Ride →
+                </button>
+              </div>
+
               {rides.length === 0 ? (
-                <div className="empty-state"><div className="empty-icon">🚗</div><div className="empty-text">No rides requested yet</div></div>
+                <div className="empty-state">
+                  <div className="empty-icon">🚗</div>
+                  <div className="empty-text">No rides yet. Go to the <strong>Rides</strong> tab to request one.</div>
+                </div>
               ) : (
-                <ul className="data-list">
-                  {rides.map(ride => (
-                    <li key={ride.id} className="ride-item">
-                      <div className="ride-info">
-                        <div className="ride-avatar">👤</div>
-                        <div style={{ flex: 1 }}>
-                          <div className="ride-user">{ride.user_name}</div>
-                          <div className="ride-meta">
-                            📍 ({ride.user_x}, {ride.user_y})
-                            {ride.driver_name && <> &nbsp;→&nbsp; 👨‍✈️ <strong>{ride.driver_name}</strong></>}
-                            {ride.distance && <> &nbsp;·&nbsp; {ride.distance} units</>}
-                            &nbsp;·&nbsp; {new Date(ride.created_at).toLocaleString()}
-                          </div>
-                        </div>
-                        {statusBadge(ride.status)}
+                <div className="scrollable" style={{ maxHeight: '420px' }}>
+                  {/* Summary row */}
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Total Rides', value: rides.length, color: 'var(--accent-light)' },
+                      { label: 'Completed', value: rides.filter(r => r.status === 'completed').length, color: 'var(--success)' },
+                      { label: 'Active', value: rides.filter(r => r.status === 'assigned').length, color: 'var(--warning)' },
+                      { label: 'No Driver', value: rides.filter(r => r.status === 'no_driver_available').length, color: 'var(--danger)' },
+                      {
+                        label: 'Avg Distance',
+                        value: rides.filter(r => r.distance).length > 0
+                          ? (rides.filter(r => r.distance).reduce((sum, r) => sum + r.distance, 0) / rides.filter(r => r.distance).length).toFixed(1) + ' units'
+                          : '—',
+                        color: 'var(--info)'
+                      },
+                    ].map((item, i) => (
+                      <div key={i} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem 1rem', minWidth: '110px', flex: '1' }}>
+                        <div style={{ fontSize: '1.3rem', fontWeight: 800, color: item.color }}>{item.value}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.2rem' }}>{item.label}</div>
                       </div>
-                      <div className="ride-actions">
-                        {ride.status === 'assigned' && (
-                          <button className="btn btn-sm btn-complete-sm" onClick={() => handleCompleteRide(ride.id)} id={`btn-complete-ride-${ride.id}`}>
-                            ✓ Done
-                          </button>
-                        )}
+                    ))}
+                  </div>
+
+                  {/* Timeline */}
+                  <div style={{ position: 'relative', paddingLeft: '1.5rem' }}>
+                    <div style={{ position: 'absolute', left: '7px', top: 0, bottom: 0, width: '2px', background: 'var(--border)' }} />
+                    <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {rides.slice(0, 10).map(ride => {
+                        const isAssigned = ride.status === 'assigned';
+                        const isCompleted = ride.status === 'completed';
+                        const isNoDriver = ride.status === 'no_driver_available';
+                        const dotColor = isCompleted ? 'var(--success)' : isAssigned ? 'var(--accent)' : 'var(--danger)';
+                        return (
+                          <li key={ride.id} style={{ position: 'relative' }}>
+                            {/* Timeline dot */}
+                            <div style={{
+                              position: 'absolute', left: '-1.5rem', top: '0.4rem',
+                              width: '10px', height: '10px', borderRadius: '50%',
+                              background: dotColor, border: '2px solid var(--bg-card)',
+                              boxShadow: `0 0 0 2px ${dotColor}44`
+                            }} />
+                            <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                <div>
+                                  <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>👤 {ride.user_name}</span>
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: '0.5rem' }}>
+                                    at ({ride.user_x}, {ride.user_y})
+                                  </span>
+                                </div>
+                                <span className={`badge ${isCompleted ? 'badge-completed' : isAssigned ? 'badge-assigned' : 'badge-no-driver'}`} style={{ flexShrink: 0 }}>
+                                  {isCompleted ? '✅ Done' : isAssigned ? '🔷 Active' : '❌ No Driver'}
+                                </span>
+                              </div>
+                              {ride.driver_name && (
+                                <div style={{ marginTop: '0.35rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                  → 👨‍✈️ <strong>{ride.driver_name}</strong> assigned
+                                  {ride.distance && <span style={{ color: 'var(--text-muted)' }}> · {ride.distance} units away</span>}
+                                </div>
+                              )}
+                              <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                🕐 {new Date(ride.created_at).toLocaleString()}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {rides.length > 10 && (
+                      <div style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        + {rides.length - 10} more rides — <button style={{ background: 'none', border: 'none', color: 'var(--accent-light)', cursor: 'pointer', fontSize: '0.8rem' }} onClick={() => setActiveTab('rides')}>View all in Rides tab</button>
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
-          </div>
 
-        </div>
+          </div>
+        )}
+
+        {/* ═══════════════ DRIVERS TAB ═══════════════ */}
+        {activeTab === 'drivers' && (
+          <div className="main-grid">
+
+            {/* Add Driver Form */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-purple">👨‍✈️</div>
+                  Add New Driver
+                </div>
+              </div>
+              <form onSubmit={handleAddDriver} id="form-add-driver-tab">
+                <div className="form-group">
+                  <label className="form-label">Driver Name</label>
+                  <input className="form-input" type="text" placeholder="e.g. John Smith"
+                    value={driverForm.name}
+                    onChange={e => setDriverForm(f => ({ ...f, name: e.target.value }))}
+                    id="input-driver-name-tab" />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">X Coordinate</label>
+                    <input className="form-input" type="number" placeholder="0–11" min="0" max="11"
+                      value={driverForm.x}
+                      onChange={e => setDriverForm(f => ({ ...f, x: e.target.value }))}
+                      id="input-driver-x-tab" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Y Coordinate</label>
+                    <input className="form-input" type="number" placeholder="0–11" min="0" max="11"
+                      value={driverForm.y}
+                      onChange={e => setDriverForm(f => ({ ...f, y: e.target.value }))}
+                      id="input-driver-y-tab" />
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={loading.addDriver} id="btn-add-driver-tab">
+                  {loading.addDriver ? (
+                    <span className="loading-dots"><span className="loading-dot" /><span className="loading-dot" /><span className="loading-dot" /></span>
+                  ) : '+ Add Driver'}
+                </button>
+              </form>
+            </div>
+
+            {/* Drivers List - full width in drivers tab */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-purple">👥</div>
+                  All Drivers
+                  <span className="count-badge">{drivers.length}</span>
+                </div>
+              </div>
+              <div className="scrollable" style={{ maxHeight: '500px' }}>
+                {drivers.length === 0 ? (
+                  <div className="empty-state"><div className="empty-icon">👨‍✈️</div><div className="empty-text">No drivers added yet</div></div>
+                ) : (
+                  <ul className="data-list">
+                    {drivers.map(d => (
+                      <li key={d.id} className="driver-item">
+                        <div className="driver-info">
+                          <div className="driver-avatar">{d.name[0].toUpperCase()}</div>
+                          <div>
+                            <div className="driver-name">{d.name}</div>
+                            <div className="driver-coords">📍 ({d.x}, {d.y})</div>
+                          </div>
+                          <span className={`badge ${d.available ? 'badge-available' : 'badge-busy'}`}>
+                            {d.available ? '● Available' : '● Busy'}
+                          </span>
+                        </div>
+                        <div className="driver-actions">
+                          <button className="btn btn-sm btn-toggle-sm" onClick={() => handleToggleDriver(d.id)} id={`btn-toggle-tab-${d.id}`}>
+                            {d.available ? 'Set Busy' : 'Set Free'}
+                          </button>
+                          <button className="btn btn-sm btn-danger-sm" onClick={() => handleDeleteDriver(d.id, d.name)} id={`btn-delete-tab-${d.id}`}>
+                            🗑
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Map in drivers tab */}
+            <div className="card full-width">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-blue">🗺️</div>
+                  Driver Locations Map
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  <span>🟢 Available</span><span>🔴 Busy</span>
+                </div>
+              </div>
+              <div className="map-container">
+                <MiniMap drivers={drivers} currentUser={null} />
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ═══════════════ RIDES TAB ═══════════════ */}
+        {activeTab === 'rides' && (
+          <div className="main-grid">
+
+            {/* Request Ride Form */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-green">🚗</div>
+                  Request a Ride
+                </div>
+              </div>
+              <form onSubmit={handleRequestRide} id="form-request-ride-tab">
+                <div className="form-group">
+                  <label className="form-label">Your Name</label>
+                  <input className="form-input" type="text" placeholder="e.g. Sarah"
+                    value={rideForm.user_name}
+                    onChange={e => setRideForm(f => ({ ...f, user_name: e.target.value }))}
+                    id="input-user-name-tab" />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Your X</label>
+                    <input className="form-input" type="number" placeholder="0–11" min="0" max="11"
+                      value={rideForm.user_x}
+                      onChange={e => {
+                        setRideForm(f => ({ ...f, user_x: e.target.value }));
+                        if (e.target.value !== '' && rideForm.user_y !== '')
+                          setUserPreview({ x: parseFloat(e.target.value), y: parseFloat(rideForm.user_y) });
+                      }}
+                      id="input-user-x-tab" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Your Y</label>
+                    <input className="form-input" type="number" placeholder="0–11" min="0" max="11"
+                      value={rideForm.user_y}
+                      onChange={e => {
+                        setRideForm(f => ({ ...f, user_y: e.target.value }));
+                        if (rideForm.user_x !== '' && e.target.value !== '')
+                          setUserPreview({ x: parseFloat(rideForm.user_x), y: parseFloat(e.target.value) });
+                      }}
+                      id="input-user-y-tab" />
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-success" disabled={loading.requestRide} id="btn-request-ride-tab">
+                  {loading.requestRide ? (
+                    <span className="loading-dots"><span className="loading-dot" /><span className="loading-dot" /><span className="loading-dot" /></span>
+                  ) : '🚕 Find Nearest Driver'}
+                </button>
+              </form>
+
+              {lastRideResult && (
+                <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: `1px solid ${lastRideResult.success ? 'var(--success)' : 'var(--danger)'}` }}>
+                  <div style={{ fontWeight: 700, color: lastRideResult.success ? 'var(--success)' : 'var(--danger)', marginBottom: '0.5rem' }}>
+                    {lastRideResult.success ? '✅ Driver Assigned!' : '❌ ' + lastRideResult.message}
+                  </div>
+                  {lastRideResult.success && lastRideResult.allDistances && (
+                    <>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Distance to all available drivers:</div>
+                      <ul className="distance-list">
+                        {lastRideResult.allDistances.map((d, i) => (
+                          <li key={d.id} className={`distance-item ${i === 0 ? 'nearest' : ''}`}>
+                            <span style={{ fontWeight: i === 0 ? 700 : 400 }}>{i === 0 ? '🏆 ' : ''}{d.name}</span>
+                            <span style={{ color: i === 0 ? 'var(--success)' : 'var(--text-secondary)' }}>{d.distance} units</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Live map with user position */}
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-blue">🗺️</div>
+                  Live Map
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  <span>🟢 Available</span><span>🔴 Busy</span><span>🟡 You</span>
+                </div>
+              </div>
+              <div className="map-container">
+                <MiniMap drivers={drivers} currentUser={userPreview} />
+              </div>
+            </div>
+
+            {/* Rides History full width */}
+            <div className="card full-width">
+              <div className="card-header">
+                <div className="card-title">
+                  <div className="card-title-icon icon-amber">📋</div>
+                  Rides History
+                  <span className="count-badge">{rides.length}</span>
+                </div>
+              </div>
+              <div className="scrollable" style={{ maxHeight: '500px' }}>
+                {rides.length === 0 ? (
+                  <div className="empty-state"><div className="empty-icon">🚗</div><div className="empty-text">No rides requested yet</div></div>
+                ) : (
+                  <ul className="data-list">
+                    {rides.map(ride => (
+                      <li key={ride.id} className="ride-item">
+                        <div className="ride-info">
+                          <div className="ride-avatar">👤</div>
+                          <div style={{ flex: 1 }}>
+                            <div className="ride-user">{ride.user_name}</div>
+                            <div className="ride-meta">
+                              📍 ({ride.user_x}, {ride.user_y})
+                              {ride.driver_name && <> &nbsp;→&nbsp; 👨‍✈️ <strong>{ride.driver_name}</strong></>}
+                              {ride.distance && <> &nbsp;·&nbsp; {ride.distance} units</>}
+                              &nbsp;·&nbsp; {new Date(ride.created_at).toLocaleString()}
+                            </div>
+                          </div>
+                          {statusBadge(ride.status)}
+                        </div>
+                        <div className="ride-actions">
+                          {ride.status === 'assigned' && (
+                            <button className="btn btn-sm btn-complete-sm" onClick={() => handleCompleteRide(ride.id)} id={`btn-complete-tab-${ride.id}`}>
+                              ✓ Done
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+
       </div>
 
       {/* Toast Container */}
